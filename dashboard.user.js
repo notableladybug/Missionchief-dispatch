@@ -1,12 +1,14 @@
 // ==UserScript==
-// @name         Vis Kun Manglende Køretøjskrav (v2.19 - Flersproget DA/EN)
-// @namespace    http://tampermonkey.net/
+// @name         Missionchief dispatch overview
+// @namespace    https://github.com/notableladybug/Missionchief-dispatch
 // @version      2.19
-// @description  Understøtter både dansk (alarmcentral-spil.dk) og engelsk (missionchief.com/co.uk).
-// @author       Marsbear
+// @description  A missionchief dispatch helper
+// @author       Ludvig
 // @match        *://*.alarmcentral-spil.dk/missions/*
 // @match        *://*.missionchief.com/missions/*
 // @match        *://*.missionchief.co.uk/missions/*
+// @updateURL    https://raw.githubusercontent.com/DIT-GITHUB-NAVN/missing-vehicle-requirements/main/missing-vehicle-requirements.user.js
+// @downloadURL  https://raw.githubusercontent.com/DIT-GITHUB-NAVN/missing-vehicle-requirements/main/missing-vehicle-requirements.user.js
 // @grant        none
 // ==/UserScript==
 
