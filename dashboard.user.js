@@ -7,8 +7,8 @@
 // @match        *://*.alarmcentral-spil.dk/missions/*
 // @match        *://*.missionchief.com/missions/*
 // @match        *://*.missionchief.co.uk/missions/*
-// @updateURL    https://raw.githubusercontent.com/DIT-GITHUB-NAVN/missing-vehicle-requirements/main/missing-vehicle-requirements.user.js
-// @downloadURL  https://raw.githubusercontent.com/DIT-GITHUB-NAVN/missing-vehicle-requirements/main/missing-vehicle-requirements.user.js
+// @updateURL    https://raw.githubusercontent.com/notableladybug/Missionchief-dispatch/main/dashboard.user.js
+// @downloadURL  https://raw.githubusercontent.com/notableladybug/Missionchief-dispatch/main/dashboard.user.js
 // @grant        none
 // ==/UserScript==
 
