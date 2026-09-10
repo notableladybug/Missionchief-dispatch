@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        Missionchief dispatch overview
 // @namespace   https://github.com/notableladybug/Missionchief-dispatch
-// @version     2.22
+// @version     2.23
 // @description A missionchief dispatch helper
 // @author      Ludvig
 // @match       *://*.alarmcentral-spil.dk/missions/*
@@ -19,11 +19,9 @@
     // ⚙️ CONFIGURATION & SPROGLAG (i18n)
     // ==========================================
     const CONFIG = {
-        // Autodetektér sprog ud fra domænet (.dk = dansk, alt andet = engelsk)
         currentLang: window.location.hostname.endsWith('.dk') ? 'da' : 'en',
 
         i18n: {
-            // --- DANSK CONFIGURATION ---
             da: {
                 categories: {
                     '🔥 Brandbiler': [
@@ -50,12 +48,12 @@
                     ],
                     '🚔 Politi': [
                         'politi', 'patrulje', 'hundepatrulje', 'fangetransport', 'gruppevogn', 
-                        'hollændervogn', 'aks', 'politimotorcykel', 'politihest', 'rydningsvogn'
+                        'hollændervogn', 'aks', 'aks personale', 'politimotorcykel', 'politihest', 'rydningsvogn'
                     ]
                 },
                 defaultCategory: '🚜 Øvrige',
                 excludeKeywords: [
-                    'patient', 'patienttransport', 'pumpekapacitet', 'vandmængde', 'liter', 'kreditter', 'fanger', 'personale', 'station', 'stationer', 'bygning', 'bygninger'
+                    'patient', 'patienttransport', 'pumpekapacitet', 'vandmængde', 'liter', 'kreditter', 'fanger', 'station', 'stationer', 'bygning', 'bygninger'
                 ],
                 customMatches: {
                     'autosprøjte': ['brandbil', 'brandbiler'],
@@ -76,7 +74,6 @@
                 }
             },
 
-            // --- ENGLISH CONFIGURATION ---
             en: {
                 categories: {
                     '🔥 Fire Engines': [
@@ -127,12 +124,7 @@
         }
     };
 
-    // Vælg det aktive sprogsopsætning
     const LANG = CONFIG.i18n[CONFIG.currentLang] || CONFIG.i18n.en;
-
-    // ==========================================
-    // 🚀 SCRIPT LOGIK
-    // ==========================================
 
     const missionGeneralInfo = document.getElementById('mission_general_info');
     if (!missionGeneralInfo) return;
