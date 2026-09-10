@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        Missionchief dispatch overview
 // @namespace   https://github.com/notableladybug/Missionchief-dispatch
-// @version     2.23
+// @version     2.24
 // @description A missionchief dispatch helper
 // @author      Ludvig
 // @match       *://*.alarmcentral-spil.dk/missions/*
@@ -31,7 +31,7 @@
                         'indsatsleder brand', 'rydningsvogn med vandkanon', 'redningsvogn', 'stige', 'lift', 
                         'snorkel', 'tankvogn', 'lkm', 'ledelses- og kommunikationsmodul', 'cbrn', 
                         'kemi', 'gift', 'højtrykskompressor', 'crash tender', 'rednings trappe', 
-                        'skum tender', 'påhængs pumpe', 'følgeskade', 'indsatsleder'
+                        'skum tender', 'påhængs pumpe', 'følgeskade'
                     ],
                     '🚚 Container': [
                         'container', 'kroghejs'
@@ -47,7 +47,7 @@
                         'generator trailer', 'lysmast', 'rednings hunde', 'redningshund'
                     ],
                     '🚔 Politi': [
-                        'politi', 'patrulje', 'hundepatrulje', 'fangetransport', 'gruppevogn', 
+                        'politi', 'indsatsleder Politi', 'patrulje', 'hundepatrulje', 'fangetransport', 'gruppevogn', 
                         'hollændervogn', 'aks', 'aks personale', 'politimotorcykel', 'politihest', 'rydningsvogn'
                     ]
                 },
