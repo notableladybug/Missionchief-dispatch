@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        Missionchief dispatch overview
 // @namespace   https://github.com/notableladybug/Missionchief-dispatch
-// @version     2.31
+// @version     2.32
 // @description A missionchief dispatch helper
 // @author      Ludvig
 // @match       *://*.alarmcentral-spil.dk/missions/*
@@ -180,6 +180,14 @@
         return name;
     }
 
+    function getProbabilityBadge(percentage) {
+        let color = '#f0ad4e';
+        if (percentage >= 70) color = '#d9534f';
+        else if (percentage < 35) color = '#777';
+
+        return `<span style="background-color: ${color}; color: #fff; padding: 2px 7px; border-radius: 10px; font-size: 11px; margin-left: 8px; font-weight: bold; display: inline-block;">🎲 ${percentage}% chance</span>`;
+    }
+
     function isMatchingVehicle(sentName, reqName) {
         const s = sentName.toLowerCase();
         const r = reqName.toLowerCase();
@@ -262,7 +270,8 @@
 
                         let isProbability = lowerName.includes('sandsynlighed') || 
                                             lowerName.includes('chance') || 
-                                            countText.includes('%');
+                                            countText.includes('%') ||
+                                            lowerName.includes('nødvendighed');
                         let chanceValue = null;
 
                         if (isProbability) {
@@ -355,6 +364,29 @@
 
             const missingVehicles = extractedVehicles.filter(item => item.missingCount > 0);
 
+            // Sammenlign og flet dubletter på tværs af procenter vha. gamle logik-struktur
+            const mergedMap = {};
+            missingVehicles.forEach(item => {
+                let normKey = item.name.toLowerCase().trim();
+                
+                if (!mergedMap[normKey]) {
+                    mergedMap[normKey] = {
+                        name: item.name,
+                        category: item.category,
+                        mandatoryMissing: 0,
+                        optionalMissing: 0,
+                        chances: []
+                    };
+                }
+
+                if (item.chance !== null) {
+                    mergedMap[normKey].optionalMissing += item.missingCount;
+                    mergedMap[normKey].chances.push(item.chance);
+                } else {
+                    mergedMap[normKey].mandatoryMissing += item.missingCount;
+                }
+            });
+
             reqBox.innerHTML = '';
 
             const badge = document.createElement('div');
@@ -368,8 +400,9 @@
             reqBox.appendChild(badge);
 
             const availableCount = getAvailableVehiclesCount();
+            const mergedList = Object.values(mergedMap);
 
-            if (missingVehicles.length === 0) {
+            if (mergedList.length === 0) {
                 badge.style.backgroundColor = '#5cb85c';
                 badge.style.color = '#fff';
                 badge.innerHTML = LANG.labels.allGood;
@@ -393,7 +426,7 @@
             }
 
             const grouped = {};
-            missingVehicles.forEach(item => {
+            mergedList.forEach(item => {
                 if (!grouped[item.category]) grouped[item.category] = [];
                 grouped[item.category].push(item);
             });
@@ -412,11 +445,10 @@
                 if (grouped[cat] && grouped[cat].length > 0) {
                     tableHTML += `<tr style="background-color: #e9ecef; font-weight: bold;"><td colspan="2" style="color: #333;">${cat}</td></tr>`;
                     grouped[cat].forEach(item => {
-                        let countDisplay = item.missingCount;
-                        if (item.chance !== null) {
-                            countDisplay = `<span style="background-color: #d9534f; color: white; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: bold; display: inline-block; box-shadow: 0 1px 2px rgba(0,0,0,0.2);">🎲 ${item.chance}% chance</span>`;
-                        }
-                        tableHTML += `<tr><td style="padding-left: 20px; vertical-align: middle;">${item.name}</td><td style="text-align:right; font-weight:bold; vertical-align: middle;">${countDisplay}</td></tr>`;
+                        const chanceBadge = item.chances.length > 0 ? getProbabilityBadge(item.chances[0]) : '';
+                        const displayCount = item.mandatoryMissing > 0 ? item.mandatoryMissing : item.optionalMissing;
+
+                        tableHTML += `<tr><td style="padding-left: 20px; vertical-align: middle;">${item.name}${chanceBadge}</td><td style="text-align:right; font-weight:bold; vertical-align: middle;">${displayCount}</td></tr>`;
                     });
                 }
             });
