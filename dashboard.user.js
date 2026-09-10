@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        Missionchief dispatch overview
 // @namespace   https://github.com/notableladybug/Missionchief-dispatch
-// @version     2.29
+// @version     2.30
 // @description A missionchief dispatch helper
 // @author      Ludvig
 // @match       *://*.alarmcentral-spil.dk/missions/*
@@ -25,7 +25,7 @@
             da: {
                 categories: {
                     '🔥 Brandbiler': [
-                        'autosprøjte', 'slangetender', 'specialsprøjte', 'sprøjte', 'brandbil', 'brandbiler'
+                        'autosprøjte', 'slange tender', 'specialsprøjte', 'sprøjte', 'brandbil', 'brandbiler'
                     ],
                     '🚒 Andet slukningsredskab': [
                         'indsatsleder brand', 'rydningsvogn med vandkanon', 'redningsvogn', 'stige', 'lift', 
