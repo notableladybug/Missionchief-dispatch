@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        Missionchief dispatch overview
 // @namespace   https://github.com/notableladybug/Missionchief-dispatch
-// @version     2.33
+// @version     2.34
 // @description A missionchief dispatch helper
 // @author      Ludvig
 // @match       *://*.alarmcentral-spil.dk/missions/*
@@ -67,7 +67,8 @@
                     'ledelses- og kommunikationsmodul': 'LKM',
                     'indsatsleder brand-køretøj': 'Indsatsleder Brand',
                     'indsatsleder sund-køretøj': 'Indsatsleder Sundhed',
-                    'Påkrævet politibil eller fangetransport': 'Påkrævet politibil'
+                    'Påkrævet politibil eller fangetransport': 'Påkrævet politibil',
+                    'at Akutlæge': 'Akutlæge'
                 },
                 labels: {
                     loading: 'Henter og beregner manglende køretøjer...',
