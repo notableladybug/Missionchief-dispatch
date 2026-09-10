@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        Missionchief dispatch overview
 // @namespace   https://github.com/notableladybug/Missionchief-dispatch
-// @version     2.26
+// @version     2.28
 // @description A missionchief dispatch helper
 // @author      Ludvig
 // @match       *://*.alarmcentral-spil.dk/missions/*
@@ -31,7 +31,7 @@
                         'indsatsleder brand', 'rydningsvogn med vandkanon', 'redningsvogn', 'stige', 'lift', 
                         'snorkel', 'tankvogn', 'lkm', 'ledelses- og kommunikationsmodul', 'cbrn', 
                         'kemi', 'gift', 'højtrykskompressor', 'crash tender', 'rednings trappe', 
-                        'skum tender', 'påhængs pumpe', 'følgeskade', 'indsatsleder'
+                        'skum tender', 'påhængs pumpe', 'følgeskade'
                     ],
                     '🚚 Container': [
                         'container', 'kroghejs'
@@ -58,11 +58,15 @@
                 customMatches: {
                     'autosprøjte': ['brandbil', 'brandbiler'],
                     'sprøjte': ['brandbil', 'brandbiler'],
-                    'ambulance': ['ambulance', 'sygetransport']
+                    'ambulance': ['ambulance', 'sygetransport'],
+                    'indsatsleder brand': ['indsatsleder brand', 'indsatsleder brand-køretøj', 'indsatsleder'],
+                    'indsatsleder sund': ['indsatsleder sund', 'indsatsleder sundhed', 'indsatsleder']
                 },
                 nameReplacements: {
                     'cbrn': 'CBRN / Kemi / Gift',
-                    'ledelses- og kommunikationsmodul': 'LKM'
+                    'ledelses- og kommunikationsmodul': 'LKM',
+                    'indsatsleder brand-køretøj': 'Indsatsleder Brand',
+                    'indsatsleder sund-køretøj': 'Indsatsleder Sundhed'
                 },
                 labels: {
                     loading: 'Henter og beregner manglende køretøjer...',
@@ -170,7 +174,7 @@
     function formatVehicleName(name) {
         const lower = name.toLowerCase();
         for (const [key, replacement] of Object.entries(LANG.nameReplacements)) {
-            if (lower.includes(key)) return replacement;
+            if (lower === key || lower.includes(key)) return replacement;
         }
         return name;
     }
@@ -180,8 +184,8 @@
         const r = reqName.toLowerCase();
 
         for (const [sentKey, reqValues] of Object.entries(LANG.customMatches)) {
-            if (s.includes(sentKey)) {
-                if (reqValues.some(val => r.includes(val))) return true;
+            if (s.includes(sentKey) || sentKey.includes(s)) {
+                if (reqValues.some(val => r.includes(val) || val.includes(r))) return true;
             }
         }
 
@@ -237,7 +241,7 @@
             const doc = parser.parseFromString(html, 'text/html');
 
             const tables = doc.querySelectorAll('table');
-            const extractedVehicles = [];
+            const rawExtracted = [];
 
             tables.forEach(table => {
                 const rows = table.querySelectorAll('tbody tr, tr');
@@ -247,7 +251,6 @@
                         let countText = row.cells[1].textContent.trim();
                         const lowerName = nameText.toLowerCase();
 
-                        // Ignorer generelle patienttransport-sandsynligheder helt
                         if (lowerName.includes('patienttransport') || lowerName.includes('patient transport')) {
                             return;
                         }
@@ -256,7 +259,6 @@
                             return;
                         }
 
-                        // Tjek om det er en chance/sandsynlighed for et køretøj
                         let isProbability = lowerName.includes('sandsynlighed') || 
                                             lowerName.includes('chance') || 
                                             countText.includes('%');
@@ -267,7 +269,6 @@
                             if (match) chanceValue = parseInt(match[0], 10);
                         }
 
-                        // Rens støj/fyldord
                         nameText = nameText.replace(/^at\s+/gi, '')
                                            .replace(/\s+er\s+krævet$/gi, '')
                                            .replace(/\s+is\s+required$/gi, '')
@@ -285,7 +286,7 @@
                         let countVal = parseInt(countText.replace(/\D/g, ''), 10);
 
                         if (nameText && (!isNaN(countVal) || isProbability)) {
-                            extractedVehicles.push({
+                            rawExtracted.push({
                                 name: nameText,
                                 count: isProbability ? 1 : countVal,
                                 chance: chanceValue,
@@ -296,7 +297,21 @@
                 });
             });
 
-            // Tilføj ambulance-krav baseret på antal ubehandlede patienter på skadestedet
+            const extractedVehicles = [];
+            rawExtracted.forEach(item => {
+                let existing = extractedVehicles.find(v => isMatchingVehicle(v.name, item.name));
+                if (existing) {
+                    if (item.chance === null && existing.chance !== null) {
+                        existing.chance = null;
+                        existing.count = item.count;
+                    } else if (item.chance === null && existing.chance === null) {
+                        existing.count = Math.max(existing.count, item.count);
+                    }
+                } else {
+                    extractedVehicles.push(item);
+                }
+            });
+
             const requiredPatientAmbulances = getRequiredAmbulancesFromPatients();
             if (requiredPatientAmbulances > 0) {
                 const ambulanceName = CONFIG.currentLang === 'da' ? 'Ambulance' : 'Ambulance';
@@ -332,7 +347,6 @@
                 });
 
                 req.missingCount = currentReqCount;
-                // Hvis det er en sandsynlighed, tæller vi den ikke med i det faste total-antal for "klar"-tjekket, da den er valgfri
                 if (req.chance === null) {
                     totalMissingVehicles += currentReqCount;
                 }
@@ -389,7 +403,7 @@
             cleanTable.style.marginBottom = '0';
             cleanTable.style.border = '1px solid #ddd';
 
-            let tableHTML = `<thead><tr style="background:#f5f5f5;"><th>${LANG.labels.tableHeaderReq}</th><th style="width:120px; text-align:right;">${LANG.labels.tableHeaderCount}</th></tr></thead><tbody>`;
+            let tableHTML = `<thead><tr style="background:#f5f5f5;"><th>${LANG.labels.tableHeaderReq}</th><th style="width:140px; text-align:right;">${LANG.labels.tableHeaderCount}</th></tr></thead><tbody>`;
 
             const categoryOrder = [...Object.keys(LANG.categories), LANG.defaultCategory];
 
@@ -397,10 +411,9 @@
                 if (grouped[cat] && grouped[cat].length > 0) {
                     tableHTML += `<tr style="background-color: #e9ecef; font-weight: bold;"><td colspan="2" style="color: #333;">${cat}</td></tr>`;
                     grouped[cat].forEach(item => {
-                        // Vis chancen i parentes, hvis det er et sandsynlighedskrav
                         let countDisplay = item.missingCount;
                         if (item.chance !== null) {
-                            countDisplay = `<span title="Sandsynlighed" style="color: #f0ad4e;">❓ ${item.chance}%</span>`;
+                            countDisplay = `<span style="background-color: #d9534f; color: white; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: bold; display: inline-block; box-shadow: 0 1px 2px rgba(0,0,0,0.2);">🎲 ${item.chance}% chance</span>`;
                         }
                         tableHTML += `<tr><td style="padding-left: 20px; vertical-align: middle;">${item.name}</td><td style="text-align:right; font-weight:bold; vertical-align: middle;">${countDisplay}</td></tr>`;
                     });
