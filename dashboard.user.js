@@ -63,7 +63,7 @@
                     'indsatsleder sund': ['indsatsleder sund', 'indsatsleder sundhed', 'indsatsleder']
                 },
                 nameReplacements: {
-                    'cbrn': 'CBRN / Kemi / Gift',
+                    'gift- og kemikaliekøretøjer': 'CBRN',
                     'ledelses- og kommunikationsmodul': 'LKM',
                     'indsatsleder brand-køretøj': 'Indsatsleder Brand',
                     'indsatsleder sund-køretøj': 'Indsatsleder Sundhed',
