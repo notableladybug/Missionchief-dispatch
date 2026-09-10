@@ -66,7 +66,8 @@
                     'cbrn': 'CBRN / Kemi / Gift',
                     'ledelses- og kommunikationsmodul': 'LKM',
                     'indsatsleder brand-køretøj': 'Indsatsleder Brand',
-                    'indsatsleder sund-køretøj': 'Indsatsleder Sundhed'
+                    'indsatsleder sund-køretøj': 'Indsatsleder Sundhed',
+                    'Påkrævet politibil eller fangetransport': 'Påkrævet politibil'
                 },
                 labels: {
                     loading: 'Henter og beregner manglende køretøjer...',
