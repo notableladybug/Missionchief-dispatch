@@ -1,15 +1,15 @@
 // ==UserScript==
-// @name         Missionchief dispatch overview
-// @namespace    https://github.com/notableladybug/Missionchief-dispatch
-// @version      2.19
-// @description  A missionchief dispatch helper
-// @author       Ludvig
-// @match        *://*.alarmcentral-spil.dk/missions/*
-// @match        *://*.missionchief.com/missions/*
-// @match        *://*.missionchief.co.uk/missions/*
-// @updateURL    https://raw.githubusercontent.com/notableladybug/Missionchief-dispatch/main/dashboard.user.js
-// @downloadURL  https://raw.githubusercontent.com/notableladybug/Missionchief-dispatch/main/dashboard.user.js
-// @grant        none
+// @name        Missionchief dispatch overview
+// @namespace   https://github.com/notableladybug/Missionchief-dispatch
+// @version     2.20
+// @description A missionchief dispatch helper
+// @author      Ludvig
+// @match       *://*.alarmcentral-spil.dk/missions/*
+// @match       *://*.missionchief.com/missions/*
+// @match       *://*.missionchief.co.uk/missions/*
+// @updateURL   https://raw.githubusercontent.com/notableladybug/Missionchief-dispatch/main/dashboard.user.js
+// @downloadURL https://raw.githubusercontent.com/notableladybug/Missionchief-dispatch/main/dashboard.user.js
+// @grant       none
 // ==/UserScript==
 
 (function() {
@@ -55,7 +55,7 @@
                 },
                 defaultCategory: '🚜 Øvrige',
                 excludeKeywords: [
-                    'patient', 'patienttransport', 'pumpekapacitet', 'vandmængde', 'liter'
+                    'patient', 'patienttransport', 'pumpekapacitet', 'vandmængde', 'liter', 'kreditter'
                 ],
                 customMatches: {
                     'autosprøjte': ['brandbil', 'brandbiler'],
@@ -66,8 +66,6 @@
                     'ledelses- og kommunikationsmodul': 'LKM'
                 },
                 labels: {
-                    allTab: 'Alle',
-                    sendNextBtn: 'Send & Næste',
                     loading: 'Henter og beregner manglende køretøjer...',
                     allGood: '✔ Alt nødvendigt udstyr er på ulykkesstedet / på vej!',
                     ready: (avail, req) => `✔ KLAR: Du har ${avail} ledige enheder (kræver ${req})`,
@@ -106,7 +104,7 @@
                 },
                 defaultCategory: '🚜 Other',
                 excludeKeywords: [
-                    'patient', 'patient transport', 'pump capacity', 'water volume', 'liters', 'gallons'
+                    'patient', 'patient transport', 'pump capacity', 'water volume', 'liters', 'gallons', 'credits'
                 ],
                 customMatches: {
                     'type 1 fire engine': ['fire engine', 'pumper'],
@@ -117,8 +115,6 @@
                     'mobile command': 'MCU'
                 },
                 labels: {
-                    allTab: 'All',
-                    sendNextBtn: 'Dispatch & Next',
                     loading: 'Fetching and calculating missing vehicles...',
                     allGood: '✔ All required equipment is on site / en route!',
                     ready: (avail, req) => `✔ READY: You have ${avail} available units (requires ${req})`,
@@ -137,56 +133,6 @@
     // ==========================================
     // 🚀 SCRIPT LOGIK
     // ==========================================
-
-    function addSendAndNextButton() {
-        const allTab = document.querySelector('a[href*="#building_panel_all"], a[data-building_panel_id="all"], a[tabload="all"]') || 
-                       Array.from(document.querySelectorAll('a, li')).find(el => el.textContent.trim() === LANG.labels.allTab);
-
-        if (!allTab || document.getElementById('custom-send-next-btn')) return;
-
-        const parentLi = allTab.closest('li');
-        const btnLi = document.createElement('li');
-        btnLi.id = 'custom-send-next-btn';
-        btnLi.style.listStyle = 'none';
-        btnLi.style.display = 'inline-block';
-        btnLi.style.marginRight = '5px';
-
-        const btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'btn btn-success btn-sm';
-        btn.innerHTML = `<span class="glyphicon glyphicon-ok"></span> ${LANG.labels.sendNextBtn}`;
-        btn.style.fontWeight = 'bold';
-        btn.style.padding = '5px 10px';
-
-        btn.addEventListener('click', function(e) {
-            e.preventDefault();
-            const nativeNextBtn = document.querySelector('input[name="next_mission"]') || document.getElementById('alert_next_btn');
-            if (nativeNextBtn) {
-                nativeNextBtn.click();
-                return;
-            }
-
-            const missionForm = document.getElementById('mission-form') || document.getElementById('mission_form');
-            if (missionForm) {
-                const hiddenInput = document.createElement('input');
-                hiddenInput.type = 'hidden';
-                hiddenInput.name = 'next_mission';
-                hiddenInput.value = '1';
-                missionForm.appendChild(hiddenInput);
-                missionForm.submit();
-            }
-        });
-
-        btnLi.appendChild(btn);
-
-        if (parentLi && parentLi.parentNode) {
-            parentLi.parentNode.insertBefore(btnLi, parentLi);
-        } else if (allTab.parentNode) {
-            allTab.parentNode.insertBefore(btnLi, allTab);
-        }
-    }
-
-    addSendAndNextButton();
 
     const missionGeneralInfo = document.getElementById('mission_general_info');
     if (!missionGeneralInfo) return;
