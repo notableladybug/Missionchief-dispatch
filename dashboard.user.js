@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        Missionchief dispatch overview
 // @namespace   https://github.com/notableladybug/Missionchief-dispatch
-// @version     2.21
+// @version     2.22
 // @description A missionchief dispatch helper
 // @author      Ludvig
 // @match       *://*.alarmcentral-spil.dk/missions/*
@@ -55,7 +55,7 @@
                 },
                 defaultCategory: '🚜 Øvrige',
                 excludeKeywords: [
-                    'patient', 'patienttransport', 'pumpekapacitet', 'vandmængde', 'liter', 'kreditter', 'fanger', 'personale'
+                    'patient', 'patienttransport', 'pumpekapacitet', 'vandmængde', 'liter', 'kreditter', 'fanger', 'personale', 'station', 'stationer', 'bygning', 'bygninger'
                 ],
                 customMatches: {
                     'autosprøjte': ['brandbil', 'brandbiler'],
@@ -104,8 +104,7 @@
                 },
                 defaultCategory: '🚜 Other',
                 excludeKeywords: [
-                    'patient', 'patient transport', 'pump capacity', 'water volume', 'liters', 'gallons', 'credits', 'prisoners', 'personnel'
-                ],
+                    'patient', 'patient transport', 'pump capacity', 'water volume', 'liters', 'gallons', 'credits', 'prisoners', 'personnel', 'station', 'stations', 'building', 'buildings'
                 ],
                 customMatches: {
                     'type 1 fire engine': ['fire engine', 'pumper'],
