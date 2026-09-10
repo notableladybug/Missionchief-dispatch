@@ -104,7 +104,8 @@
                 },
                 defaultCategory: '🚜 Other',
                 excludeKeywords: [
-                    'patient', 'patient transport', 'pump capacity', 'water volume', 'liters', 'gallons', 'credits'
+                    'patient', 'patient transport', 'pump capacity', 'water volume', 'liters', 'gallons', 'credits', 'prisoners', 'personnel'
+                ],
                 ],
                 customMatches: {
                     'type 1 fire engine': ['fire engine', 'pumper'],
