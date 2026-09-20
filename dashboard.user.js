@@ -53,7 +53,7 @@
                 },
                 defaultCategory: '🚜 Øvrige',
                 excludeKeywords: [
-                    'patient', 'patienttransport', 'pumpekapacitet', 'vandmængde', 'liter', 'kreditter', 'fanger', 'station', 'stationer', 'bygning', 'bygninger', 'Varighed', 'Nødvendigt personale', 'Nødvendigt minimum af brandmænd'
+                    'patient', 'patienttransport', 'pumpekapacitet', 'vandmængde', 'liter', 'kreditter', 'fanger', 'station', 'stationer', 'bygning', 'bygninger', 'Varighed', 'Nødvendigt personale', 'Nødvendigt minimum af brandmænd', 'Løber kun fra', 'Løber kun indtil'
                 ],
                 customMatches: {
                     'autosprøjte': ['brandbil', 'brandbiler'],
