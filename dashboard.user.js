@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        Missionchief dispatch overview
 // @namespace   https://github.com/notableladybug/Missionchief-dispatch
-// @version     2.36
+// @version     2.37
 // @description A missionchief dispatch helper
 // @author      Ludvig
 // @match       *://*.alarmcentral-spil.dk/missions/*
@@ -15,9 +15,11 @@
 (function () {
     'use strict';
 
-    const VERSION = '2.36';
+    const VERSION = '2.37';
     const REFRESH_INTERVAL_MS = 3000;   // hvor ofte boksen tjekker for ændringer
     const MIN_SUBSTRING_LEN = 5;        // kortere nøgleord i kategorier matches kun som hele ord
+    const TYPE_CACHE_KEY = 'mcDispatchVehicleTypes';
+    const TYPE_CACHE_MAX = 6000;
 
     // ==========================================
     // ⚙️ CONFIGURATION & SPROGLAG (i18n)
@@ -31,7 +33,7 @@
             da: {
                 categories: {
                     '🔥 Brandbiler': [
-                        'autosprøjte', 'slange tender', 'specialsprøjte', 'sprøjte', 'brandbil', 'brandbiler'
+                        'autosprøjte', 'slange tender', 'slangetender', 'specialsprøjte', 'sprøjte', 'brandbil', 'brandbiler'
                     ],
                     '🚒 Andet slukningsredskab': [
                         'indsatsleder brand', 'rydningsvogn med vandkanon', 'redningsvogn', 'stige', 'lift',
@@ -63,7 +65,7 @@
                     'fanger', 'station', 'stationer', 'bygning', 'bygninger', 'varighed',
                     'nødvendigt personale', 'nødvendigt minimum af brandmænd', 'løber kun fra', 'løber kun indtil'
                 ],
-                // Sendt køretøj (nøgle) kan også opfylde disse krav (værdier). Kun eksakt navnematch på kravet.
+                // Køretøj (nøgle) kan også opfylde disse krav (værdier). Kun eksakt navnematch på kravet.
                 customMatches: {
                     'autosprøjte': ['brandbil', 'brandbiler'],
                     'sprøjte': ['brandbil', 'brandbiler'],
@@ -84,7 +86,7 @@
                     ready: (avail, req) => `✔ KLAR: Du har ${avail} ledige enheder (kræver ${req})`,
                     missing: (short, avail) => `✖ MANGLER KØRETØJER: ${short} køretøj(er) kan ikke dækkes af dine ${avail} ledige enheder!`,
                     availUnknown: (req) => `⚠ Kunne ikke aflæse ledige køretøjer – tjek manuelt (mangler ${req})`,
-                    noRequirements: '⚠ Ingen køretøjskrav fundet for denne missionstype – tjek siden manuelt.',
+                    noRequirements: '⚠ Kunne ikke læse køretøjskrav for missionen (se konsollen, F12) – viser kun patientkrav.',
                     tableHeaderReq: 'Mangler på skadestedet',
                     tableHeaderAvail: 'Ledige',
                     tableHeaderCount: 'Antal',
@@ -138,7 +140,7 @@
                     ready: (avail, req) => `✔ READY: You have ${avail} available units (requires ${req})`,
                     missing: (short, avail) => `✖ MISSING VEHICLES: ${short} vehicle(s) cannot be covered by your ${avail} available units!`,
                     availUnknown: (req) => `⚠ Could not read available vehicles – check manually (missing ${req})`,
-                    noRequirements: '⚠ No vehicle requirements found for this mission type – check the page manually.',
+                    noRequirements: '⚠ Could not read the mission requirements (see console, F12) – showing patient requirements only.',
                     tableHeaderReq: 'Missing on scene',
                     tableHeaderAvail: 'Available',
                     tableHeaderCount: 'Count',
@@ -186,6 +188,30 @@
         return re.test(haystack);
     }
 
+    // Kravnavne kan stå i flertal ("Patruljevogne", "Ambulancer"); prøv også entalsformer.
+    function nameVariants(name) {
+        const n = norm(name);
+        const variants = [n];
+        if (n.length > 5 && /(er|ne)$/.test(n)) variants.push(n.slice(0, -2));
+        if (n.length > 4 && /[er]$/.test(n)) variants.push(n.slice(0, -1));
+        return Array.from(new Set(variants));
+    }
+
+    // Et "kandidatnavn" for et køretøj. strict = kendt korrekt typenavn (kun eksakt/alias-match),
+    // ikke strict = et frit navn/kaldenavn (må også matche som helt ord, fx "Ambulance 3").
+    const cand = (text, strict) => ({ text: norm(text), strict: !!strict });
+
+    function dedupeCands(list) {
+        const seen = new Set();
+        return list.filter(c => {
+            if (!c.text) return false;
+            const k = `${c.strict}|${c.text}`;
+            if (seen.has(k)) return false;
+            seen.add(k);
+            return true;
+        });
+    }
+
     // ==========================================
     // Opstart
     // ==========================================
@@ -194,6 +220,9 @@
 
     const missionTypeId = missionGeneralInfo.getAttribute('data-mission-type');
     if (!missionTypeId) return;
+
+    const missionIdMatch = window.location.pathname.match(/\/missions\/(\d+)/);
+    const missionId = missionIdMatch ? missionIdMatch[1] : '';
 
     const oldBox = document.getElementById('custom-requirements-box');
     if (oldBox) oldBox.remove();
@@ -215,9 +244,27 @@
         if (colLeft) colLeft.prepend(reqBox);
     }
 
-    let requirementRows = null;   // parsede krav (uden kategori), fra cache eller fetch
+    let requirementRows = null;   // parsede krav (uden kategori); kan være [] hvis intet blev fundet
     let lastSignature = null;
     let timer = null;
+
+    // Køretøjs-id -> typenavn. Bruges til at finde typen på køretøjer, der allerede er sendt afsted
+    // (de står ikke længere i listen over ledige, og deres navn i "sendt"-tabellen er blot et kaldenavn).
+    let typeCache = {};
+    try { typeCache = JSON.parse(localStorage.getItem(TYPE_CACHE_KEY) || '{}') || {}; } catch (e) { typeCache = {}; }
+
+    function rememberTypes(pairs) {
+        let changed = false;
+        pairs.forEach(([id, type]) => {
+            if (id && type && typeCache[id] !== type) { typeCache[id] = type; changed = true; }
+        });
+        if (!changed) return;
+        const ids = Object.keys(typeCache);
+        if (ids.length > TYPE_CACHE_MAX) {
+            ids.slice(0, ids.length - TYPE_CACHE_MAX).forEach(k => delete typeCache[k]);
+        }
+        try { localStorage.setItem(TYPE_CACHE_KEY, JSON.stringify(typeCache)); } catch (e) { /* ignorer */ }
+    }
 
     // ==========================================
     // Navne, kategorier og matching
@@ -241,19 +288,15 @@
         return name;
     }
 
-    // Hvor godt matcher et køretøj (liste af kandidatstrenge) et krav? 0 = intet match.
-    // 3 = eksakt navn, 2 = kravets navn indgår som helt ord, 1 = eksplicit alias fra customMatches.
-    function matchScore(candidates, reqName) {
-        const r = norm(reqName);
+    // Hvor godt matcher et køretøj (liste af kandidater) et krav? 0 = intet match.
+    // 3 = eksakt typenavn, 2 = kravnavn indgår som helt ord i et frit navn, 1 = alias fra customMatches.
+    function matchScore(cands, entry) {
         let best = 0;
-        for (const c of candidates) {
-            if (c === r) return 3;
-            if (containsWord(c, r)) {
-                best = Math.max(best, 2);
-                continue;
-            }
+        for (const c of cands) {
+            if (entry.variants.includes(c.text)) return 3;
+            if (!c.strict && entry.variants.some(v => containsWord(c.text, v))) best = Math.max(best, 2);
             for (const [key, aliases] of CUSTOM) {
-                if (c.includes(key) && aliases.includes(r)) best = Math.max(best, 1);
+                if (c.text.includes(key) && entry.variants.some(v => aliases.includes(v))) best = Math.max(best, 1);
             }
         }
         return best;
@@ -283,89 +326,116 @@
         const out = [];
         ['vehicle_type', 'data-vehicle-type', 'vehicle_type_caption'].forEach(attr => {
             const v = el.getAttribute && el.getAttribute(attr);
-            if (v) out.push(norm(v));
+            if (v) out.push(v);
         });
         return out;
     }
 
-    // Returnerer en liste af køretøjer; hvert køretøj er en liste af kandidatstrenge (lowercase).
+    function getVehicleId(row) {
+        const attr = row.getAttribute('vehicle_id');
+        if (attr) return attr;
+        const link = row.querySelector('a[href*="/vehicles/"]');
+        const m = link && link.getAttribute('href').match(/\/vehicles\/(\d+)/);
+        if (m) return m[1];
+        const idm = (row.id || '').match(/(\d+)$/);
+        return idm ? idm[1] : '';
+    }
+
+    // Rækker i listen over køretøjer, man kan vælge (ledige/optagede) – IKKE sendte køretøjer.
+    function isSelectableVehicleRow(row) {
+        return row.classList.contains('vehicle_select_table_tr') ||
+               !!row.querySelector('input.vehicle_checkbox') ||
+               !!row.closest('table[id^="vehicle_show_table"]');
+    }
+
+    // Køretøjer på vej / på skadestedet. Hvert køretøj er en liste af kandidater.
+    // Vigtigt: tabellen over LEDIGE køretøjer må aldrig regnes med her.
     function readSentVehicles() {
-        let rows = [];
+        const rows = new Set();
 
         ['mission_vehicle_at_mission', 'mission_vehicle_driving'].forEach(id => {
             const el = document.getElementById(id);
-            if (el) rows.push(...el.querySelectorAll('tr'));
+            if (el) el.querySelectorAll('tr').forEach(r => rows.add(r));
         });
 
-        // Fallback: find tabeller ud fra deres <th>-overskrifter (ikke hele tabellens tekst)
-        if (rows.length === 0) {
-            document.querySelectorAll('table').forEach(table => {
-                if (reqBox.contains(table)) return;
-                const head = norm(Array.from(table.querySelectorAll('th')).map(th => th.textContent).join(' '));
-                const hasVehicle = head.includes('køretøj') || head.includes('vehicle');
-                const hasBuilding = head.includes('station') || head.includes('building') || head.includes('bygning');
-                if (hasVehicle && hasBuilding) rows.push(...table.rows);
+        // Fallback hvis id'erne ikke findes: rækker uden for den valgbare liste, der linker til et køretøj
+        if (rows.size === 0) {
+            document.querySelectorAll('a[href*="/vehicles/"]').forEach(a => {
+                const row = a.closest('tr');
+                if (!row || reqBox.contains(row) || isSelectableVehicleRow(row)) return;
+                rows.add(row);
             });
         }
 
         const sent = [];
         rows.forEach(row => {
             if (row.querySelector('th') || !row.cells || row.cells.length < 1) return;
-            const cellText = row.cells[0].textContent.trim();
-            if (!cellText || /annull[ée]r|cancel/i.test(cellText)) return;
+            if (isSelectableVehicleRow(row)) return;
 
-            const candidates = [norm(cellText)];
-            candidates.push(...typeAttrsOf(row));
-            row.querySelectorAll('[vehicle_type],[data-vehicle-type],[vehicle_type_caption]')
-                .forEach(el => candidates.push(...typeAttrsOf(el)));
-            sent.push(Array.from(new Set(candidates)));
+            const link = row.querySelector('a[href*="/vehicles/"]');
+            const caption = (link ? link.textContent : row.cells[0].textContent).trim();
+            if (!caption || /annull[ée]r|cancel/i.test(caption)) return;
+
+            const cands = [];
+            const id = getVehicleId(row);
+            if (id && typeCache[id]) cands.push(cand(typeCache[id], true));
+            typeAttrsOf(row).forEach(t => cands.push(cand(t, true)));
+            cands.push(cand(caption, false));
+            sent.push(dedupeCands(cands));
         });
         return sent;
     }
 
-    // Returnerer null, hvis køretøjslisten ikke findes på siden (ledige kan ikke aflæses).
+    // Ledige køretøjer (status 1/2) fra listen. Returnerer null, hvis listen ikke findes.
     function readAvailableVehicles() {
-        const rows = document.querySelectorAll(
-            'tr.vehicle_select_table_tr, tr.vehicle_rel, #vehicle_show_table_body_all tr, tr[id^="vehicle_row"]'
-        );
+        let rows = Array.from(document.querySelectorAll('tr.vehicle_select_table_tr'));
+        if (rows.length === 0) rows = Array.from(document.querySelectorAll('#vehicle_show_table_body_all tr'));
         if (!vehicleList && rows.length === 0) return null;
 
         const seen = new Set();
         const available = [];
+        const known = [];
 
         rows.forEach(row => {
             if (reqBox.contains(row)) return;
-            // Rækker i tabellerne over sendte køretøjer er ikke ledige
-            if (row.closest('#mission_vehicle_at_mission, #mission_vehicle_driving')) return;
-            // Skjult (via inline style, CSS-klasse eller skjult forælder)
-            if (row.offsetParent === null) return;
+
+            const type = row.getAttribute('vehicle_type');
+            const id = getVehicleId(row);
+            if (id && type) known.push([id, type]);
+
+            // Optagede køretøjer (fane) og sendte køretøjer er ikke ledige
+            if (row.closest('#occupied, #mission_vehicle_at_mission, #mission_vehicle_driving')) return;
 
             const checkbox = row.querySelector('input[type="checkbox"]');
-            if (checkbox && checkbox.disabled) return;
+            if (checkbox) {
+                if (checkbox.disabled) return;
+                const fms = checkbox.getAttribute('fms');
+                if (fms && fms !== '1' && fms !== '2') return;
+            }
 
-            const key = (checkbox && checkbox.value) || row.id;
+            // Ét køretøj tælles kun én gang, uanset fane. Synlighed bruges bevidst IKKE:
+            // ellers ville tallet ændre sig, når du skifter fane eller bruger søgefeltet.
+            const key = (checkbox && checkbox.value) || id || row.id;
             if (key) {
                 if (seen.has(key)) return;
                 seen.add(key);
             }
 
-            const candidates = [];
-            candidates.push(...typeAttrsOf(row));
-            if (checkbox) candidates.push(...typeAttrsOf(checkbox));
-            row.querySelectorAll('[vehicle_type],[data-vehicle-type],[vehicle_type_caption]')
-                .forEach(el => candidates.push(...typeAttrsOf(el)));
-            // Uden typeattributter falder vi tilbage til rækkens tekst
-            if (candidates.length === 0) candidates.push(norm(row.textContent));
-
-            available.push(Array.from(new Set(candidates)));
+            const cands = [];
+            typeAttrsOf(row).forEach(t => cands.push(cand(t, true)));
+            if (checkbox) typeAttrsOf(checkbox).forEach(t => cands.push(cand(t, true)));
+            if (cands.length === 0) cands.push(cand(row.textContent, false));
+            available.push(dedupeCands(cands));
         });
 
+        rememberTypes(known);
         return available;
     }
 
     function getRequiredAmbulancesFromPatients() {
-        const pageText = document.body.textContent || '';
-        const match = pageText.match(/(\d+)\s+(?:ubehandlede\s+patienter|untreated\s+patients)/i);
+        const el = document.getElementById('patient_button_text');
+        const text = (el ? el.textContent : document.body.textContent) || '';
+        const match = text.match(/(\d+)\s+(?:ubehandlede\s+patienter|untreated\s+patients)/i);
         return match ? parseInt(match[1], 10) : 0;
     }
 
@@ -446,6 +516,7 @@
             else e.mandatory = Math.max(e.mandatory, r.count);
         });
 
+        // Ubehandlede patienter kræver ambulancer – også selvom kravsiden ikke nævner dem
         if (patientAmbulances > 0) {
             let amb = Array.from(map.values()).find(e => e.key.includes('ambulance'));
             if (!amb) amb = ensure('Ambulance');
@@ -453,7 +524,10 @@
         }
 
         const entries = Array.from(map.values());
-        entries.forEach(e => e.chances.sort((a, b) => b - a));
+        entries.forEach(e => {
+            e.chances.sort((a, b) => b - a);
+            e.variants = nameVariants(e.name);
+        });
         return entries;
     }
 
@@ -462,7 +536,8 @@
         entries.forEach(e => {
             e.remMand = e.mandatory;
             e.remOpt = e.chances.slice();
-            e.availMatched = 0;
+            e.availMatched = 0;   // ledige køretøjer, der er reserveret til dette krav
+            e.availTotal = 0;     // alle ledige køretøjer af denne type (til visning)
             e.short = 0;
         });
 
@@ -470,7 +545,7 @@
             let best = null, bestRank = 0;
             entries.forEach(e => {
                 if (e.remMand <= 0 && e.remOpt.length === 0) return;
-                const score = matchScore(cands, e.name);
+                const score = matchScore(cands, e);
                 if (score === 0) return;
                 const rank = score * 2 + (e.remMand > 0 ? 1 : 0);
                 if (rank > bestRank) { best = e; bestRank = rank; }
@@ -482,10 +557,12 @@
 
         if (available) {
             available.forEach(cands => {
+                entries.forEach(e => { if (matchScore(cands, e) > 0) e.availTotal++; });
+
                 let best = null, bestScore = 0;
                 entries.forEach(e => {
                     if (e.remMand - e.availMatched <= 0) return;
-                    const score = matchScore(cands, e.name);
+                    const score = matchScore(cands, e);
                     if (score > bestScore) { best = e; bestScore = score; }
                 });
                 if (best) best.availMatched++;
@@ -522,14 +599,16 @@
         reqBox.appendChild(badge);
     }
 
-    function renderBox(entries, availableCount, availableKnown) {
+    function renderBox(entries, availableCount, availableKnown, hasRequirementInfo) {
         reqBox.innerHTML = '';
 
         const missing = entries.filter(e => e.remMand > 0 || e.remOpt.length > 0);
         const totalMissing = entries.reduce((s, e) => s + e.remMand, 0);
         const totalShort = entries.reduce((s, e) => s + e.short, 0);
 
-        if (totalMissing === 0) {
+        if (!hasRequirementInfo) {
+            applyState('warn', LANG.labels.noRequirements);
+        } else if (totalMissing === 0) {
             applyState('ok', LANG.labels.allGood);
         } else if (!availableKnown) {
             applyState('warn', LANG.labels.availUnknown(totalMissing));
@@ -574,12 +653,8 @@
 
                 html += `<tr><td style="padding-left: 20px; vertical-align: middle;">${escapeHtml(item.name)}${chanceBadges}</td>`;
                 if (availableKnown) {
-                    if (item.remMand > 0) {
-                        const color = item.short > 0 ? '#d9534f' : '#3c763d';
-                        html += `<td style="text-align:right; font-weight:bold; vertical-align: middle; color:${color};">${item.availMatched}</td>`;
-                    } else {
-                        html += '<td style="text-align:right; vertical-align: middle; color:#999;">–</td>';
-                    }
+                    const color = item.short > 0 ? '#d9534f' : '#3c763d';
+                    html += `<td style="text-align:right; font-weight:bold; vertical-align: middle; color:${color};">${item.availTotal}</td>`;
                 }
                 html += `<td style="text-align:right; font-weight:bold; vertical-align: middle;">${escapeHtml(countText)}</td></tr>`;
             });
@@ -601,54 +676,79 @@
         const available = readAvailableVehicles();
         const patients = getRequiredAmbulancesFromPatients();
 
-        const signature = JSON.stringify([sent, available ? available.map(c => c[0]) : null, patients]);
+        const signature = JSON.stringify([sent, available ? available.map(c => c[0].text) : null, patients]);
         if (!force && signature === lastSignature) return;
         lastSignature = signature;
 
         const entries = buildEntries(requirementRows, patients);
         allocate(entries, sent, available);
-        renderBox(entries, available ? available.length : 0, available !== null);
+        renderBox(entries, available ? available.length : 0, available !== null, requirementRows.length > 0);
+
+        // Fejlsøgning: skriv  mcDispatchDebug  i konsollen (F12)
+        window.mcDispatchDebug = { version: VERSION, requirementRows, patients, sent, available, entries };
     }
 
     // ==========================================
-    // Hentning af krav (med cache pr. missionstype i denne fane)
+    // Hentning af krav (med cache pr. mission i denne fane)
     // ==========================================
-    const cacheKey = `mcDispatchReq:${VERSION}:${CONFIG.currentLang}:${missionTypeId}`;
+    const cacheKey = `mcDispatchReq:${VERSION}:${CONFIG.currentLang}:${missionId || missionTypeId}`;
 
-    function loadRequirementRows() {
+    // Missionens egen "Krav for denne mission"-knap peger på siden med de rigtige krav
+    // (inkl. ?mission_id=…). Uden mission_id kan man få en anden/tom side.
+    function getRequirementUrls() {
+        const urls = [];
+        const help = document.getElementById('mission_help') ||
+                     document.getElementById('mission-type-helper-mobile') ||
+                     document.querySelector('a[href*="/einsaetze/"]');
+        const href = help && help.getAttribute('href');
+        if (href) urls.push(href);
+        if (missionId) urls.push(`/einsaetze/${encodeURIComponent(missionTypeId)}?mission_id=${missionId}`);
+        urls.push(`/einsaetze/${encodeURIComponent(missionTypeId)}`);
+        return Array.from(new Set(urls));
+    }
+
+    async function loadRequirementRows() {
         try {
             const cached = sessionStorage.getItem(cacheKey);
             if (cached) {
                 const parsed = JSON.parse(cached);
-                if (Array.isArray(parsed) && parsed.length > 0) return Promise.resolve(parsed);
+                if (Array.isArray(parsed) && parsed.length > 0) return parsed;
             }
         } catch (e) { /* ingen cache – hent normalt */ }
 
-        return fetch(`/einsaetze/${encodeURIComponent(missionTypeId)}`, { credentials: 'same-origin' })
-            .then(response => {
-                if (!response.ok) throw new Error(`HTTP ${response.status}`);
-                return response.text();
-            })
-            .then(html => {
+        let lastError = null;
+        let gotResponse = false;
+
+        for (const url of getRequirementUrls()) {
+            try {
+                const response = await fetch(url, { credentials: 'same-origin' });
+                if (!response.ok) throw new Error(`HTTP ${response.status} for ${url}`);
+                gotResponse = true;
+
+                const html = await response.text();
                 const rows = extractRows(html);
                 if (rows.length > 0) {
                     try { sessionStorage.setItem(cacheKey, JSON.stringify(rows)); } catch (e) { /* ignorer */ }
+                    return rows;
                 }
-                return rows;
-            });
+                console.warn('[Missionchief dispatch] Ingen krav fundet i svaret fra', url, {
+                    htmlLength: html.length,
+                    tables: (html.match(/<table/gi) || []).length,
+                    start: html.replace(/\s+/g, ' ').slice(0, 300)
+                });
+            } catch (err) {
+                lastError = err;
+            }
+        }
+
+        if (!gotResponse && lastError) throw lastError;
+        return [];
     }
 
     loadRequirementRows()
         .then(rows => {
             reqBox.innerHTML = '';
-
-            // Ingen krav fundet (fx login-side eller ændret HTML) må aldrig vises som "alt er OK"
-            if (rows.length === 0) {
-                applyState('warn', LANG.labels.noRequirements);
-                return;
-            }
-
-            requirementRows = rows;
+            requirementRows = rows;   // også [] – patientkrav skal stadig vises
             update(true);
             timer = setInterval(() => update(false), REFRESH_INTERVAL_MS);
         })
