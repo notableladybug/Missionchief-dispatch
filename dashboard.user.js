@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        Missionchief dispatch overview
 // @namespace   https://github.com/notableladybug/Missionchief-dispatch
-// @version     2.37
+// @version     2.39
 // @description A missionchief dispatch helper
 // @author      Ludvig
 // @match       *://*.alarmcentral-spil.dk/missions/*
@@ -15,7 +15,7 @@
 (function () {
     'use strict';
 
-    const VERSION = '2.37';
+    const VERSION = '2.39';
     const REFRESH_INTERVAL_MS = 3000;   // hvor ofte boksen tjekker for ændringer
     const MIN_SUBSTRING_LEN = 5;        // kortere nøgleord i kategorier matches kun som hele ord
     const TYPE_CACHE_KEY = 'mcDispatchVehicleTypes';
@@ -31,32 +31,36 @@
 
         i18n: {
             da: {
+                // Kategorierne følger spillets officielle inddeling. Nøgleord under 5 tegn matcher kun som hele ord,
+                // og det længste matchende nøgleord vinder (fx 'rydningsvogn med vandkanon' > 'rydningsvogn').
                 categories: {
                     '🔥 Brandbiler': [
-                        'autosprøjte', 'slange tender', 'slangetender', 'specialsprøjte', 'sprøjte', 'brandbil', 'brandbiler'
+                        'autosprøjte', 'slangetender', 'specialsprøjte', 'sprøjte', 'brandbil'
                     ],
                     '🚒 Andet slukningsredskab': [
-                        'indsatsleder brand', 'rydningsvogn med vandkanon', 'redningsvogn', 'stige', 'lift',
-                        'snorkel', 'tankvogn', 'lkm', 'ledelses- og kommunikationsmodul', 'cbrn',
-                        'kemi', 'gift', 'højtrykskompressor', 'crash tender', 'rednings trappe',
-                        'skum tender', 'påhængs pumpe', 'følgeskade'
-                    ],
-                    '🚚 Container': [
-                        'container', 'kroghejs'
+                        'indsatsleder brand', 'rydningsvogn med vandkanon', 'redningsvogn', 'stigevogn', 'stige',
+                        'liftvogn', 'lift', 'snorkelvogn', 'snorkel', 'tankvogn', 'vandtankvogn',
+                        'lkm', 'ledelses- og kommunikationsmodul', 'cbrn', 'kemi', 'gift',
+                        'højtrykskompressor', 'crash tender', 'rednings trappe', 'skum tender',
+                        'påhængs pumpe', 'påhængs pumpe stor', 'følgeskade'
                     ],
                     '⛴️ Vandredning': [
-                        'dykker', 'overfladeredder', 'bådtrailer', 'båd'
+                        'dykkerbil', 'dykker', 'overfladeredderbil', 'overfladeredder', 'bådtrailer', 'båd'
                     ],
                     '🚑 Ambulance': [
                         'ambulance', 'sygetransport', 'nødbehandler', 'indsatsleder sund',
-                        'akutlæge', 'læge', 'behandlingsplads'
+                        'akutlæge', 'læge', 'specialambulance', 'mobil behandlingsplads', 'behandlingsplads'
                     ],
                     '🚨 Katastrofehjælp': [
-                        'generator trailer', 'lysmast', 'rednings hunde', 'redningshund'
+                        'generator trailer', 'lysmast trailer', 'lysmast', 'rednings hunde', 'redningshund'
+                    ],
+                    '🚚 Container': [
+                        'kroghejs med kran', 'kroghejs', 'container'
                     ],
                     '🚔 Politi': [
-                        'politi', 'patrulje', 'hundepatrulje', 'fangetransport', 'gruppevogn',
-                        'hollændervogn', 'aks', 'aks personale', 'politimotorcykel', 'politihest', 'rydningsvogn'
+                        'patruljevogn', 'patrulje', 'hundepatrulje', 'fangetransport', 'gruppevogn',
+                        'hollændervogn', 'indsatsleder politi', 'aks pansret mandskabsvogn', 'aks patruljevogn',
+                        'aks', 'politimotorcykel', 'politihest', 'rydningsvogn', 'politi'
                     ]
                 },
                 defaultCategory: '🚜 Øvrige',
@@ -67,8 +71,11 @@
                 ],
                 // Køretøj (nøgle) kan også opfylde disse krav (værdier). Kun eksakt navnematch på kravet.
                 customMatches: {
+                    // Kravsiden bruger generiske navne som "brandbiler" og "politibiler"
                     'autosprøjte': ['brandbil', 'brandbiler'],
-                    'sprøjte': ['brandbil', 'brandbiler'],
+                    'specialsprøjte': ['brandbil', 'brandbiler'],
+                    'slangetender': ['brandbil', 'brandbiler'],
+                    'patruljevogn': ['politibil', 'politibiler'],
                     'ambulance': ['ambulance', 'sygetransport'],
                     'indsatsleder brand': ['indsatsleder brand', 'indsatsleder brand-køretøj', 'indsatsleder'],
                     'indsatsleder sund': ['indsatsleder sund', 'indsatsleder sundhed', 'indsatsleder']
@@ -296,7 +303,8 @@
             if (entry.variants.includes(c.text)) return 3;
             if (!c.strict && entry.variants.some(v => containsWord(c.text, v))) best = Math.max(best, 2);
             for (const [key, aliases] of CUSTOM) {
-                if (c.text.includes(key) && entry.variants.some(v => aliases.includes(v))) best = Math.max(best, 1);
+                const keyHit = c.strict ? c.text === key : c.text.includes(key);
+                if (keyHit && entry.variants.some(v => aliases.includes(v))) best = Math.max(best, 1);
             }
         }
         return best;
@@ -368,21 +376,37 @@
         }
 
         const sent = [];
+        const learned = [];
         rows.forEach(row => {
-            if (row.querySelector('th') || !row.cells || row.cells.length < 1) return;
-            if (isSelectableVehicleRow(row)) return;
+            if (row.querySelector('th') || isSelectableVehicleRow(row)) return;
 
-            const link = row.querySelector('a[href*="/vehicles/"]');
-            const caption = (link ? link.textContent : row.cells[0].textContent).trim();
-            if (!caption || /annull[ée]r|cancel/i.test(caption)) return;
+            // Rækken skal indeholde et køretøjslink. Det udelukker fx knaprækken
+            // "Køretøjsvisning begrænset!", og første celle er kun statusfeltet (FMS).
+            const link = row.querySelector('a[href*="/vehicles/"]:not([href*="backalarm"])');
+            if (!link) return;
+            const caption = link.textContent.trim();
+            if (!caption) return;
 
             const cands = [];
+
+            // Selve typenavnet står i parentes lige efter linket: "Ambulance 3 (Ambulance)"
+            const small = link.parentElement && link.parentElement.querySelector('small:not(.visible-xs)');
+            const typeMatch = small && small.textContent.trim().match(/^\(\s*([^)]+?)\s*\)$/);
+            const typeLabel = typeMatch ? typeMatch[1] : '';
+            if (typeLabel) cands.push(cand(typeLabel, true));
+
+            const typeId = link.getAttribute('vehicle_type_id');
+            if (typeId && typeLabel) learned.push(['t' + typeId, typeLabel]);
+
             const id = getVehicleId(row);
             if (id && typeCache[id]) cands.push(cand(typeCache[id], true));
+            if (typeId && typeCache['t' + typeId]) cands.push(cand(typeCache['t' + typeId], true));
             typeAttrsOf(row).forEach(t => cands.push(cand(t, true)));
+
             cands.push(cand(caption, false));
             sent.push(dedupeCands(cands));
         });
+        rememberTypes(learned);
         return sent;
     }
 
@@ -402,6 +426,8 @@
             const type = row.getAttribute('vehicle_type');
             const id = getVehicleId(row);
             if (id && type) known.push([id, type]);
+            const typeIdCell = row.querySelector('[vehicle_type_id]');
+            if (type && typeIdCell) known.push(['t' + typeIdCell.getAttribute('vehicle_type_id'), type]);
 
             // Optagede køretøjer (fane) og sendte køretøjer er ikke ledige
             if (row.closest('#occupied, #mission_vehicle_at_mission, #mission_vehicle_driving')) return;
@@ -470,21 +496,29 @@
                     chance = parseInt(m[0], 10);
                 }
 
-                let name = rawName.replace(/^at\s+/gi, '')
-                                  .replace(/\s+er\s+krævet$/gi, '')
-                                  .replace(/\s+is\s+required$/gi, '')
-                                  .replace(/nødvendighed\s+af\s+/gi, '')
-                                  .replace(/nødvendighed\s+for\s+/gi, '')
-                                  .replace(/nødvendighed\s+/gi, '')
-                                  .replace(/^Påkrævede\s+/gi, '')
-                                  .replace(/^Påkrævet\s+/gi, '')
-                                  .replace(/sandsynlighed\s+for\s+/gi, '')
-                                  .replace(/chance\s+for\s+/gi, '')
-                                  .replace(/^Required\s+/gi, '')
-                                  .replace(/\s+/g, ' ')
-                                  .trim();
+                // Præfikser kan ligge i lag ("Sandsynlighed for at Akutlæge"), så gentag til intet ændrer sig
+                const cleanName = (n) => n.replace(/^at\s+/gi, '')
+                                          .replace(/\s+er\s+krævet$/gi, '')
+                                          .replace(/\s+is\s+required$/gi, '')
+                                          .replace(/nødvendighed\s+af\s+/gi, '')
+                                          .replace(/nødvendighed\s+for\s+/gi, '')
+                                          .replace(/nødvendighed\s+/gi, '')
+                                          .replace(/^Påkrævede\s+/gi, '')
+                                          .replace(/^Påkrævet\s+/gi, '')
+                                          .replace(/sandsynlighed\s+for\s+/gi, '')
+                                          .replace(/chance\s+for\s+/gi, '')
+                                          .replace(/^Required\s+/gi, '')
+                                          .replace(/\s+/g, ' ')
+                                          .trim();
+                let name = rawName;
+                for (let i = 0; i < 4; i++) {
+                    const next = cleanName(name);
+                    if (next === name) break;
+                    name = next;
+                }
                 name = formatVehicleName(name);
                 if (!name) return;
+                name = name.charAt(0).toUpperCase() + name.slice(1);
 
                 if (isProbability) {
                     rows.push({ name, chance, count: 1 });
