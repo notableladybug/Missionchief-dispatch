@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        Missionchief dispatch overview
 // @namespace   https://github.com/notableladybug/Missionchief-dispatch
-// @version     2.39
+// @version     2.40
 // @description A missionchief dispatch helper
 // @author      Ludvig
 // @match       *://*.alarmcentral-spil.dk/missions/*
@@ -35,7 +35,7 @@
                 // og det længste matchende nøgleord vinder (fx 'rydningsvogn med vandkanon' > 'rydningsvogn').
                 categories: {
                     '🔥 Brandbiler': [
-                        'autosprøjte', 'slangetender', 'specialsprøjte', 'sprøjte', 'brandbil'
+                        'autosprøjte', 'slange tender', 'specialsprøjte', 'sprøjte', 'brandbil'
                     ],
                     '🚒 Andet slukningsredskab': [
                         'indsatsleder brand', 'rydningsvogn med vandkanon', 'redningsvogn', 'stigevogn', 'stige',
@@ -85,7 +85,8 @@
                     'ledelses- og kommunikationsmodul': 'LKM',
                     'indsatsleder brand-køretøj': 'Indsatsleder Brand',
                     'indsatsleder sund-køretøj': 'Indsatsleder Sundhed',
-                    'politibil eller fangetransport': 'Politibil'
+                    'politibil eller fangetransport': 'Politibil',
+                    'slange tender': 'Slangetender'
                 },
                 labels: {
                     loading: 'Henter og beregner manglende køretøjer...',
