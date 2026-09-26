@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        Missionchief dispatch overview
 // @namespace   https://github.com/notableladybug/Missionchief-dispatch
-// @version     2.40
+// @version     2.41
 // @description A missionchief dispatch helper
 // @author      Ludvig
 // @match       *://*.alarmcentral-spil.dk/missions/*
@@ -86,7 +86,8 @@
                     'indsatsleder brand-køretøj': 'Indsatsleder Brand',
                     'indsatsleder sund-køretøj': 'Indsatsleder Sundhed',
                     'politibil eller fangetransport': 'Politibil',
-                    'slange tender': 'Slangetender'
+                    'slange tender': 'Slangetender',
+                    'Vandtankvogne': 'Tankvogn'
                 },
                 labels: {
                     loading: 'Henter og beregner manglende køretøjer...',
