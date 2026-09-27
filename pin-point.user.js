@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        Missionchief building pin planner
 // @namespace   https://github.com/notableladybug/Missionchief-dispatch
-// @version     1.0
+// @version     1.1
 // @description Rent visuelle byggepins for planlagte stationer – klik på kortet eller søg adresse
 // @author      Ludvig
 // @match       *://*.alarmcentral-spil.dk/*
@@ -74,10 +74,29 @@
             typeof obj.removeLayer === 'function' &&
             typeof obj.getCenter === 'function' &&
             typeof obj.on === 'function' &&
-            typeof obj.panTo === 'function';
+            typeof obj.panTo === 'function' &&
+            typeof obj.getContainer === 'function';
+    }
+
+    // Spillet bruger tilsyneladende det samme kort-objekt (og/eller samme "map"-id) til
+    // hoved-kortet OG til POI-vælgeren i "Sæt nyt interessepunkt" / "Administrer POI'er".
+    // Derfor er det ikke nok at finde ET Leaflet-kort et sted i vinduet – vi skal finde
+    // det specifikke kort, hvis DOM-container sidder i hovedsiden (#main_container),
+    // ikke inde i en modal/lightbox.
+    function getMainMapContainer() {
+        const scoped = document.querySelector('#main_container #map, #main_container .leaflet-container');
+        if (scoped) return scoped;
+        const bare = document.getElementById('map');
+        if (bare && !bare.closest('.lightbox, .modal, .ui-dialog, [class*="lightbox"], [class*="modal"]')) {
+            return bare;
+        }
+        return null;
     }
 
     function findLeafletMap() {
+        const mainContainer = getMainMapContainer();
+        if (!mainContainer) return null;
+
         const candidates = [
             win.map, win.leafletMap, win.gameMap,
             win.xy_map && win.xy_map.map,
@@ -85,14 +104,14 @@
             win.xy_map && win.xy_map.leafletMap
         ];
         for (const c of candidates) {
-            if (isLeafletMapLike(c)) return c;
+            if (isLeafletMapLike(c) && c.getContainer() === mainContainer) return c;
         }
-        // Sidste udvej: scan globale variabler for noget, der ligner et Leaflet-kort
+        // Sidste udvej: scan globale variabler, men kræv stadig at containeren er den rigtige
         try {
             for (const key of Object.keys(win)) {
                 let val;
                 try { val = win[key]; } catch (e) { continue; }
-                if (isLeafletMapLike(val)) return val;
+                if (isLeafletMapLike(val) && val.getContainer() === mainContainer) return val;
             }
         } catch (e) { /* ignorer */ }
         return null;
