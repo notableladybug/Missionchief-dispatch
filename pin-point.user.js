@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        Missionchief building pin planner
 // @namespace   https://github.com/notableladybug/Missionchief-dispatch
-// @version     1.1
+// @version     1.2
 // @description Rent visuelle byggepins for planlagte stationer – klik på kortet eller søg adresse
 // @author      Ludvig
 // @match       *://*.alarmcentral-spil.dk/*
@@ -26,11 +26,13 @@
 
     // Kategorier til dine byggepins. Farve er en hex-kode; tilføj/omdøb frit.
     const CATEGORIES = [
-        { id: 'fire',   label: 'Brandstation',      color: '#d9534f' },
-        { id: 'rescue', label: 'Ambulance/Redning',  color: '#e75480' },
-        { id: 'police', label: 'Politistation',      color: '#2b6cb0' },
-        { id: 'school', label: 'Uddannelse',         color: '#8e44ad' },
-        { id: 'other',  label: 'Andet',              color: '#f0ad4e' }
+        { id: 'fire',   label: 'Brandstation',          color: '#d9534f' },
+        { id: 'rescue', label: 'Ambulance/Redning',     color: '#e75480' },
+        { id: 'hospital',  label: 'Sygehus',            color: '#b91f0a' },
+        { id: 'police', label: 'Politistation',         color: '#2b6cb0' },
+        { id: 'prison', label: 'Fængsel',               color: '#0b3663' },
+        { id: 'school', label: 'Uddannelse',            color: '#8e44ad' },
+        { id: 'other',  label: 'Andet',                 color: '#f0ad4e' }
     ];
     const DEFAULT_CATEGORY = 'other';
     const categoryById = Object.fromEntries(CATEGORIES.map(c => [c.id, c]));
