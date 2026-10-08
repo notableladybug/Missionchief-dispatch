@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        Missionchief dispatch overview
 // @namespace   https://github.com/notableladybug/Missionchief-dispatch
-// @version     2.41
+// @version     2.42
 // @description A missionchief dispatch helper
 // @author      Ludvig
 // @match       *://*.alarmcentral-spil.dk/missions/*
@@ -15,7 +15,7 @@
 (function () {
     'use strict';
 
-    const VERSION = '2.39';
+    const VERSION = '2.42';
     const REFRESH_INTERVAL_MS = 3000;   // hvor ofte boksen tjekker for ændringer
     const MIN_SUBSTRING_LEN = 5;        // kortere nøgleord i kategorier matches kun som hele ord
     const TYPE_CACHE_KEY = 'mcDispatchVehicleTypes';
@@ -87,7 +87,8 @@
                     'indsatsleder sund-køretøj': 'Indsatsleder Sundhed',
                     'politibil eller fangetransport': 'Politibil',
                     'slange tender': 'Slangetender',
-                    'Vandtankvogne': 'Tankvogn'
+                    'Vandtankvogne': 'Tankvogn',
+                    'Kræver Indsatsleder Sund': 'Indsatsleder Sund'
                 },
                 labels: {
                     loading: 'Henter og beregner manglende køretøjer...',
