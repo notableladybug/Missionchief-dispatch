@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        Missionchief dispatch overview
 // @namespace   https://github.com/notableladybug/Missionchief-dispatch
-// @version     2.43
+// @version     2.44
 // @description A missionchief dispatch helper
 // @author      Ludvig
 // @match       *://*.alarmcentral-spil.dk/missions/*
@@ -15,7 +15,7 @@
 (function () {
     'use strict';
 
-    const VERSION = '2.43';
+    const VERSION = '2.44';
     const REFRESH_INTERVAL_MS = 3000;   // hvor ofte boksen tjekker for ændringer
     const MIN_SUBSTRING_LEN = 5;        // kortere nøgleord i kategorier matches kun som hele ord
     const TYPE_CACHE_KEY = 'mcDispatchVehicleTypes';
@@ -101,6 +101,9 @@
                     tableHeaderReq: 'Mangler på skadestedet',
                     tableHeaderAvail: 'Ledige',
                     tableHeaderCount: 'Antal',
+                    filterLabel: 'Filter',
+                    filterClear: '✕ Vis alle køretøjer',
+                    filterHint: 'Klik for at filtrere køretøjslisten',
                     errorMsg: 'Kunne ikke hente køretøjskrav. Prøv at genindlæse siden.'
                 }
             },
@@ -155,6 +158,9 @@
                     tableHeaderReq: 'Missing on scene',
                     tableHeaderAvail: 'Available',
                     tableHeaderCount: 'Count',
+                    filterLabel: 'Filter',
+                    filterClear: '✕ Show all vehicles',
+                    filterHint: 'Click to filter the vehicle list',
                     errorMsg: 'Could not fetch mission requirements. Please refresh the page.'
                 }
             }
@@ -206,6 +212,11 @@
         if (n.length > 5 && /(er|ne)$/.test(n)) variants.push(n.slice(0, -2));
         if (n.length > 4 && /[er]$/.test(n)) variants.push(n.slice(0, -1));
         return Array.from(new Set(variants));
+    }
+
+    // "Stigevogn eller brandbil" -> ['Stigevogn', 'brandbil']. Kun når der står eller/or.
+    function splitAlternatives(name) {
+        return String(name).split(/\s+(?:eller|or)\s+/i).map(s => s.trim()).filter(Boolean);
     }
 
     // Et "kandidatnavn" for et køretøj. strict = kendt korrekt typenavn (kun eksakt/alias-match),
@@ -462,6 +473,70 @@
         return available;
     }
 
+    // ==========================================
+    // Filter i køretøjslisten (kun i hukommelsen, nulstilles når siden forlades)
+    // ==========================================
+    const HIDE_CLASS = 'mc-filter-hide';
+    const styleEl = document.createElement('style');
+    styleEl.textContent =
+        `.${HIDE_CLASS}{display:none !important;}` +
+        '#custom-requirements-box tr[data-key]{cursor:pointer;}' +
+        '#custom-requirements-box tr[data-key]:hover td{background:#eef;}' +
+        '#custom-requirements-box tr.mc-active td{background:#d9edf7 !important;}';
+    document.head.appendChild(styleEl);
+
+    let activeFilter = null;   // { key, name, variants }
+    let lastEntries = [];
+
+    function filterRowCands(row) {
+        const cands = [];
+        typeAttrsOf(row).forEach(t => cands.push(cand(t, true)));
+        const checkbox = row.querySelector('input[type="checkbox"]');
+        if (checkbox) typeAttrsOf(checkbox).forEach(t => cands.push(cand(t, true)));
+        if (cands.length === 0) cands.push(cand(row.textContent, false));
+        return cands;
+    }
+
+    function applyFilter() {
+        let rows = Array.from(document.querySelectorAll('tr.vehicle_select_table_tr'));
+        if (rows.length === 0) rows = Array.from(document.querySelectorAll('#vehicle_show_table_body_all tr'));
+        rows.forEach(row => {
+            if (reqBox.contains(row)) return;
+            const hide = activeFilter && matchScore(filterRowCands(row), activeFilter) === 0;
+            row.classList.toggle(HIDE_CLASS, !!hide);   // egen klasse, så spillets egen skjul/vis ikke påvirkes
+        });
+    }
+
+    reqBox.addEventListener('click', ev => {
+        if (ev.target.closest('[data-clear-filter]')) {
+            activeFilter = null;
+        } else {
+            const tr = ev.target.closest('tr[data-key]');
+            if (!tr) return;
+            const key = tr.getAttribute('data-key');
+            if (activeFilter && activeFilter.key === key) {
+                activeFilter = null;
+            } else {
+                const entry = lastEntries.find(e => e.key === key);
+                if (!entry) return;
+                activeFilter = { key, name: entry.name, variants: entry.variants };
+            }
+        }
+        applyFilter();
+        update(true);
+    });
+
+    // Spillet genopbygger listen ved fanebladsskift/søgning – hold filteret på
+    let filterQueued = false;
+    function queueFilter() {
+        if (!activeFilter || filterQueued) return;
+        filterQueued = true;
+        requestAnimationFrame(() => { filterQueued = false; applyFilter(); });
+    }
+    if (vehicleList) new MutationObserver(queueFilter).observe(vehicleList, { childList: true, subtree: true });
+
+    window.addEventListener('pagehide', () => { activeFilter = null; applyFilter(); });
+
     function getRequiredAmbulancesFromPatients() {
         const el = document.getElementById('patient_button_text');
         const text = (el ? el.textContent : document.body.textContent) || '';
@@ -564,7 +639,10 @@
         const entries = Array.from(map.values());
         entries.forEach(e => {
             e.chances.sort((a, b) => b - a);
-            e.variants = nameVariants(e.name);
+            // "Stigevogn eller brandbil": køretøjer af en af delene opfylder kravet
+            const alts = splitAlternatives(e.name);
+            e.alts = Math.max(1, alts.length);
+            e.variants = Array.from(new Set(alts.flatMap(nameVariants)));
         });
         return entries;
     }
@@ -585,7 +663,8 @@
                 if (e.remMand <= 0 && e.remOpt.length === 0) return;
                 const score = matchScore(cands, e);
                 if (score === 0) return;
-                const rank = score * 2 + (e.remMand > 0 ? 1 : 0);
+                // Mest specifikke krav først (færrest "eller"-alternativer)
+                const rank = (score * 2 + (e.remMand > 0 ? 1 : 0)) * 10 - e.alts;
                 if (rank > bestRank) { best = e; bestRank = rank; }
             });
             if (!best) return;
@@ -600,7 +679,9 @@
                 let best = null, bestScore = 0;
                 entries.forEach(e => {
                     if (e.remMand - e.availMatched <= 0) return;
-                    const score = matchScore(cands, e);
+                    const s = matchScore(cands, e);
+                    if (s === 0) return;
+                    const score = s * 10 - e.alts;
                     if (score > bestScore) { best = e; bestScore = score; }
                 });
                 if (best) best.availMatched++;
@@ -644,6 +725,12 @@
         const totalMissing = entries.reduce((s, e) => s + e.remMand, 0);
         const totalShort = entries.reduce((s, e) => s + e.short, 0);
 
+        // Kravet er dækket -> fjern filteret
+        if (activeFilter && !missing.some(e => e.key === activeFilter.key)) {
+            activeFilter = null;
+            applyFilter();
+        }
+
         if (!hasRequirementInfo) {
             applyState('warn', LANG.labels.noRequirements);
         } else if (totalMissing === 0) {
@@ -654,6 +741,14 @@
             applyState('ok', LANG.labels.ready(availableCount, totalMissing));
         } else {
             applyState('bad', LANG.labels.missing(totalShort, availableCount));
+        }
+
+        if (activeFilter) {
+            const bar = document.createElement('div');
+            bar.style.cssText = 'display:inline-block; margin:0 0 12px 10px;';
+            bar.innerHTML = `<span class="label label-info">${escapeHtml(LANG.labels.filterLabel)}: ${escapeHtml(activeFilter.name)}</span> ` +
+                            `<button type="button" class="btn btn-xs btn-default" data-clear-filter="1">${escapeHtml(LANG.labels.filterClear)}</button>`;
+            reqBox.appendChild(bar);
         }
 
         if (missing.length === 0) return;
@@ -689,7 +784,9 @@
                 else if (item.remMand > 0) countText = String(item.remMand);
                 else countText = String(item.remOpt.length);
 
-                html += `<tr><td style="padding-left: 20px; vertical-align: middle;">${escapeHtml(item.name)}${chanceBadges}</td>`;
+                const isActive = activeFilter && activeFilter.key === item.key;
+                html += `<tr data-key="${escapeHtml(item.key)}" class="${isActive ? 'mc-active' : ''}" title="${escapeHtml(LANG.labels.filterHint)}">` +
+                        `<td style="padding-left: 20px; vertical-align: middle;">${escapeHtml(item.name)}${chanceBadges}</td>`;
                 if (availableKnown) {
                     const color = item.short > 0 ? '#d9534f' : '#3c763d';
                     html += `<td style="text-align:right; font-weight:bold; vertical-align: middle; color:${color};">${item.availTotal}</td>`;
@@ -720,6 +817,7 @@
 
         const entries = buildEntries(requirementRows, patients);
         allocate(entries, sent, available);
+        lastEntries = entries;
         renderBox(entries, available ? available.length : 0, available !== null, requirementRows.length > 0);
 
         // Fejlsøgning: skriv  mcDispatchDebug  i konsollen (F12)
@@ -788,7 +886,7 @@
             reqBox.innerHTML = '';
             requirementRows = rows;   // også [] – patientkrav skal stadig vises
             update(true);
-            timer = setInterval(() => update(false), REFRESH_INTERVAL_MS);
+            timer = setInterval(() => { update(false); if (activeFilter) applyFilter(); }, REFRESH_INTERVAL_MS);
         })
         .catch(err => {
             reqBox.innerHTML = '';
